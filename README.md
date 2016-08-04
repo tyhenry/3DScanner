@@ -22,6 +22,11 @@ Code for custom-build 3D scanner:
   - autoscanning mode (run full rotation of photos and moves)
   - uses CheapStepper 28BYJ-48 stepper motor controller library
   
+##openFrameworks
+####**/scannerControl**
+
+- oF app with serial<->arduino interface
+  
   
 
 ####*more documentation coming soon*
