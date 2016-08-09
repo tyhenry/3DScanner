@@ -16,7 +16,7 @@ public:
     Scanner();
   }
 
-  void update(); // call every loop()!!!
+  bool update(); // call every loop()!!!
   void setIrLedPin(int pin){ /* sets up infrared led cam trigger */ irLedPin = pin; pinMode(irLedPin, OUTPUT); } // must be called at least once!!
   void setCamLedPin(int pin){ /* sets up camera ready status led */ camLedPin = pin; pinMode(camLedPin, OUTPUT); }
 
@@ -108,6 +108,8 @@ private:
   unsigned long stepsPerTurn = 0; // calculated from turnsPerCircle
   int autoscanMovesLeft = 0; // how many moves/photos left in full rotation autoscan (0 when not autoscanning)
 
+  bool bChanged = false;
+
   unsigned long photoStart = 0; // saves millis() time when last photo triggered
 
 };
@@ -122,11 +124,13 @@ private:
 // PUBLIC API
 // -----------------
 
-void Scanner::update() {
+bool Scanner::update() {
+
+  bChanged = false;
 
   if (autoscanMovesLeft > 0) { // autoscanning
     continueAutoscan();
-    return;
+    return bChanged;
   }
 
   // not autoscanning
@@ -142,6 +146,7 @@ void Scanner::update() {
     if (stepper.getStepsLeft() == 0) { // is move done?
       delay(100); // wait 1/10s to prevent turntable jitter
       bMoving = false;
+      bChanged = true;
     }
     if (camLedPin != 0) { digitalWrite(camLedPin, LOW); } // cam not ready
   }
@@ -149,11 +154,13 @@ void Scanner::update() {
   else if (bShooting) { // mid-photo?
 
     if (millis() - photoStart > waitAfterPhoto) { // is photo done?
-      bShooting = false; 
+      bShooting = false;
+      bChanged = true;
     }
     if (camLedPin != 0) { digitalWrite(camLedPin, LOW); } // cam not ready
   }
-
+  
+  return bChanged;
 }
 
 void Scanner::startAutoscan() {
@@ -244,6 +251,7 @@ void Scanner::continueAutoscan() { // continue autoscan
     if (!bMoving && !bShooting) { // not moving + not shooting = ready to shoot
       if (camLedPin != 0) digitalWrite(camLedPin, HIGH); // notify
       takePhoto();
+      bChanged = true;
     }
 
     // or initiate move
@@ -253,6 +261,7 @@ void Scanner::continueAutoscan() { // continue autoscan
       if (millis() - photoStart > waitAfterPhoto) { // if we've waited long enough for photo to finish
 
         bShooting = false;
+        bChanged = true;
         autoscanMovesLeft--; // decrement # moves left
         turn(); // initiate next turn
       }
@@ -267,6 +276,7 @@ void Scanner::continueAutoscan() { // continue autoscan
       if (stepper.getStepsLeft() == 0) { // check if current move done
         delay (100); // delay 1/10s to account for turntable jitter
         bMoving = false;
+        bChanged = true;
       }
     }
 

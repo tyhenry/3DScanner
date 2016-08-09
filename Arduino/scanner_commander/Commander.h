@@ -1,5 +1,6 @@
 /*
- valid cmds: 
+ valid cmds:
+ 'H' = handshake (input H1, response: H1)
  'R' = set RPM (val 0: report)
  'M' = move one turn (val 0: report is moving)
  'P' = take picture (val 0: report is shooting)
@@ -119,12 +120,14 @@ void Commander::parseAllIncoming() {
       cmdVal cv = cvtBufferToCmdVal(buf, bufLen);   // convert buffer to cmdVal (char and unsigned long)
 
       if (cv.cmd != 0){
-        addToCmdQueue(cv.cmd, cv.val);  // add to queue 
-      
+        if (cv.cmd == 'H' && cv.val == 1) { // handshake, send response
+          sendCmd('H',1);
+        } else {
+          addToCmdQueue(cv.cmd, cv.val);  // add to queue 
+        }
       } else {
         sendCmd(ERR,INVALID_BUFFER); // report error on serial
       }
-      
       // clear buffer, start fresh
       memset(buf,0,sizeof(buf));  // init to 0
       bufLen = 0;
@@ -258,10 +261,5 @@ void Commander::addToCmdQueue (char cmd, unsigned long val){
   cmdQueue[nextSpot].val = val;
   numCmds++; // increment num cmds in queue
 }
-
-
-
-//void runCommands() {
-//
 
 
