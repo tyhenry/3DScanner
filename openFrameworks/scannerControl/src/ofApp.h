@@ -7,9 +7,9 @@
 class GuiTheme : public ofxDatGuiTheme {
 public:
     
-    GuiTheme() {
+    GuiTheme(int width = 400) {
         font.size = 8;
-        layout.width = 400;
+        layout.width = width;
         layout.labelWidth = 180;
         layout.upperCaseLabels = false;
         layout.breakHeight = 10.0f;
@@ -28,6 +28,11 @@ public:
     void onDropdownEvent(ofxDatGuiDropdownEvent e);
     void connectScanner(ofxDatGuiButtonEvent e);
     void newGearRatioInput(ofxDatGuiTextInputEvent e);
+    
+    void newWatchFolderInput(ofxDatGuiTextInputEvent e);
+    bool loadWatchFolder(string folderPath);
+    
+    int loadNewImages();
  
     //void setTurnDegreesLabel();
     
@@ -72,8 +77,19 @@ public:
     ofxDatGuiButton* turnBtn;
     ofxDatGuiButton* rotateBtn;
     ofxDatGuiSlider* rotateSlider;
+    ofxDatGuiLabel* stepLabel;
     ofxDatGuiTextInput* commandInput;
     ofxDatGuiLabel* commandOutput;
-
+    
+    // Watch folder GUI
+    
+    ofxDatGui* folderGui;
+    ofxDatGuiTextInput* folderInput;
+    
+    ofDirectory watchFolder;
+    vector <ofFile> loadedFiles;
+    vector <ofImage> images;
+    ofRectangle imgArea;
+    float imgWidth = 0;
 		
 };

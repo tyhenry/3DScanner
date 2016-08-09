@@ -45,9 +45,13 @@ public:
     int getAutoscanShotsLeft() { return autoscanShotsLeft; }
     int getWaitAfterShot() { return waitSeconds; }
     int getNumCmdsAtArduino() { return nCmdsAtArduino; }
+    unsigned long getCurrentStep() { return currentStep; }
+    unsigned long getNumStepsTurntable() { return nStepsTurntable; }
     float getDegree();
+    bool getLastCmdValRcvd(char* cmd, unsigned long* val);
     
     bool isConnected() { return connected; }
+    void disconnect() { connected = false; }
     
     
 private:
@@ -60,7 +64,7 @@ private:
     
     int numShotsTaken = 0;
     
-    unsigned long nStepsTurntable = 0;
+    unsigned long nStepsTurntable = 1;
     unsigned long currentStep = 0;
     int rpm = 0;
     bool bMoving = false;
@@ -71,6 +75,9 @@ private:
     int autoscanShotsLeft = 0;
     int waitSeconds = 0;
     int nCmdsAtArduino = 0; // tracks number of unprocessed cmds in arduino's cmdQueue
+    
+    char lastCmdRcv = 0; // last cmd received
+    unsigned long lastValRcv = 0; // last val received
     
 };
 

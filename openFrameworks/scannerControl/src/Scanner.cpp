@@ -35,7 +35,8 @@ int Scanner::update(){
 
 void Scanner::setClockwise(bool cw){
     
-    commander.send('K',(int)cw); // 1 cw, 0 ccw
+    if (cw)
+    commander.send('K',(int)(!cw)); // reversed: table cw == motor ccw
 }
 
 void Scanner::autoscan(bool start){
@@ -101,6 +102,15 @@ float Scanner::getDegree(){
     return (float)currentStep/(float)nStepsTurntable * 360.0; // calc degree from current step
 }
 
+bool Scanner::getLastCmdValRcvd(char* cmd, unsigned long* val){
+    if (lastCmdRcv != 0){
+        *cmd = lastCmdRcv;
+        *val = lastValRcv;
+        return true;
+    }
+    return false;
+}
+
 
 // PRIVATE
 
@@ -113,13 +123,28 @@ bool Scanner::parse(char cmd, unsigned long val){
     else if (cmd == 'M') bMoving = (val == 0) ? 0:1;
     else if (cmd == 'P') bShooting = (val == 0) ? 0:1;
     else if (cmd == 'C') numShotsPerRotation = val;
-    else if (cmd == 'K') clockwise = (val == 0) ? 0:1;
+    else if (cmd == 'K') clockwise = (val == 0) ? 1:0; // reversed (table v. motor)
     else if (cmd == 'A') autoscanShotsLeft = val;
     else if (cmd == 'W') waitSeconds = val/1000;
     else if (cmd == 'G') nStepsTurntable = val;
-    else if (cmd == 'S') currentStep = val;
+    else if (cmd == 'S') {
+        currentStep = nStepsTurntable - val;
+        if (currentStep == nStepsTurntable) currentStep = 0;
+        else if (currentStep > nStepsTurntable) {
+            // bug in motor code? step # doesn't wrap around total steps if already higher...
+            // ideally, don't set gear ratio/total steps after scanner/stepper init
+            // hack fix
+            val %= nStepsTurntable;
+            currentStep = nStepsTurntable-val;
+        }
+    }
     else if (cmd == 'Q') nCmdsAtArduino = val;
     else good = false;
+    
+    if (good) {
+        lastCmdRcv = cmd;
+        lastValRcv = val;
+    }
     
     return good;
 }
