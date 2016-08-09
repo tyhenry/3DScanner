@@ -3,6 +3,7 @@
 //--------------------------------------------------------------
 void ofApp::setup(){
     ofBackground(0);
+    //ofSetLogLevel(OF_LOG_VERBOSE);
     
     // SERIAL PREP
     
@@ -61,6 +62,7 @@ void ofApp::setup(){
     camReadyLabel = gui->addLabel("Ready to Shoot");
     clockwiseToggle = gui->addToggle("Move Clockwise", true);
     autoscanToggle = gui->addToggle("Start Auto-scan", false);
+    autoscanLabel = gui->addLabel("Auto-scan Shots Left: ");
     shutterBtn = gui->addButton("Take Shot");
     turnBtn = gui->addButton("Move one Turn");
     rotateBtn = gui->addButton("Hold to Rotate");
@@ -109,6 +111,7 @@ void ofApp::setup(){
     camReadyLabel->setLabelColor(green);
     clockwiseToggle->setStripeColor(red);
     autoscanToggle->setStripeColor(red);
+    autoscanLabel->setStripeColor(red);
     shutterBtn->setStripeColor(red);
     turnBtn->setStripeColor(red);
     rotateBtn->setStripeColor(red);
@@ -122,13 +125,14 @@ void ofApp::setup(){
     // -- SETUP
     
     gui->onDropdownEvent(this, &ofApp::onDropdownEvent); // select device or baud rate
+    
     scannerConnectBtn->onButtonEvent(this, &ofApp::connectScanner); // connect to scanner
+    
+    gearInput->onTextInputEvent(this, &ofApp::newGearRatioInput);
 
     rpmSlider->onSliderEvent([&](ofxDatGuiSliderEvent e){ // lambda, set scanner rpm
         scanner.setRpm(rpmSlider->getValue());
     });
-    
-    gearInput->onTextInputEvent(this, &ofApp::newGearRatioInput);
     
     numShotsSlider->onSliderEvent([&](ofxDatGuiSliderEvent e){
         // lambda, set scanner num shots/rotation, update turn degrees
@@ -175,9 +179,15 @@ void ofApp::setup(){
     gearInput->setText("1:4");
     rpmSlider->setValue(10);
     numShotsSlider->setValue(24);
-    //setTurnDegreesLabel(); // based on shotsSlider value
     rotateSlider->setValue(0);
     waitSlider->setValue(3);
+    
+    // FORCE EVENT CALLBACKS
+//    gearInput->onFocusLost();
+//    rpmSlider->dispatchSliderChangedEvent();
+//    numShotsSlider->dispatchSliderChangedEvent();
+//    waitSlider->dispatchSliderChangedEvent();
+    
     
     // update turn degrees label
 //    float turnDegrees = 360.0/numShotsSlider->getValue();
@@ -199,17 +209,28 @@ void ofApp::setup(){
 //--------------------------------------------------------------
 void ofApp::update(){
     
-    // hold to rotate contiously
-    if (rotateBtn->getMouseDown()){
-        scanner.rotate();
-    }
-    // change in rotation degree + mouse released
-    if (rotationChanged && !rotateSlider->getMouseDown()){
-        float rotation = rotateSlider->getValue();
-        if (rotation == 360.0) { rotateSlider->setValue(0.0); }
-        rotationChanged = false;
-        // move scanner to rotation degree
-        scanner.rotateTo(rotation);
+    if (scanner.isConnected()){
+    
+        // hold to rotate contiously
+        if (rotateBtn->getMouseDown()){
+            if (ofGetElapsedTimef() - startRotateTime > waitBetweenRotatePresses){
+                scanner.rotate();
+                startRotateTime = ofGetElapsedTimef();
+            }
+        }
+        // change in rotation degree + mouse released
+        if (rotationChanged && !rotateSlider->getMouseDown()){
+            float rotation = rotateSlider->getValue();
+            if (rotation == 360.0) { rotateSlider->setValue(0.0); }
+            rotationChanged = false;
+            // move scanner to rotation degree
+            scanner.rotateTo(rotation);
+        }
+        
+        // get all new output from scanner
+        if (scanner.update() > 0) { // new data from scanner
+            updateGui();
+        }
     }
     
 }
@@ -221,6 +242,38 @@ void ofApp::draw(){
 }
 
 //--------------------------------------------------------------
+void ofApp::updateGui(){
+    
+    rpmSlider->setValue(scanner.getRpm());
+    numShotsSlider->setValue(scanner.getNumShotsPerRotation());
+    waitSlider->setValue(scanner.getWaitAfterShot());
+    clockwiseToggle->setChecked(scanner.isClockwise());
+    autoscanToggle->setChecked(scanner.isAutoscanning());
+    rotateSlider->setValue(scanner.getDegree());
+    
+    // autoscan label (# shots left)
+    string asLbl = "Autoscan Shots Left: ";
+    asLbl += ofToString(scanner.getAutoscanShotsLeft());
+    autoscanLabel->setLabel(asLbl);
+    
+    // cam ready label
+    if (scanner.isMoving() && scanner.isShooting()){
+        camReadyLabel->setLabelColor(ofColor::red);
+        camReadyLabel->setLabel("Moving and Shooting!");
+    } else if (scanner.isMoving()){
+        camReadyLabel->setLabelColor(ofColor::red);
+        camReadyLabel->setLabel("Moving");
+    } else if (scanner.isShooting()){
+        camReadyLabel->setLabelColor(ofColor::red);
+        camReadyLabel->setLabel("Shooting");
+    } else {
+        camReadyLabel->setLabelColor(ofColor::green);
+        camReadyLabel->setLabel("Ready to Shoot");
+    }
+    
+}
+
+//--------------------------------------------------------------
 void ofApp::onDropdownEvent(ofxDatGuiDropdownEvent e){
     
     if (e.target==serialDeviceDropdown) {
@@ -228,14 +281,14 @@ void ofApp::onDropdownEvent(ofxDatGuiDropdownEvent e){
         serialDevice = serialDeviceDropdown->getChildAt(e.child)->getName();
         lbl += serialDevice;
         serialDeviceDropdown->setLabel(lbl);
-        gui->update(); // ? fix
+        //gui->update(); // ? fix
     }
     else if (e.target==serialBaudDropdown){ // lambda, set serial baud dropdown label
         string lbl = "Baud Rate: ";
         baudRate = baudRates[e.child];
         lbl += ofToString(baudRate);
         serialBaudDropdown->setLabel(lbl);
-        gui->update(); // ? fix
+        //gui->update(); // ? fix
     }
     else {
         ofLogError("ofxDatGui") << "unspecified dropdown target!";
@@ -254,7 +307,7 @@ void ofApp::connectScanner(ofxDatGuiButtonEvent e){
     // if we're not already connected and we have a device and baudrate selected
     if (!scanner.isConnected() && serialDevice != "" && baudRate != 0){
 
-        bool good = false; string newLbl = "";
+        string newLbl = "";
         ofColor scanColor = ofColor::red; ofColor serColor = ofColor::red;
         
         // connect to serial, check if worked
@@ -277,6 +330,16 @@ void ofApp::connectScanner(ofxDatGuiButtonEvent e){
         
         serialBaudDropdown->setLabelColor(serColor);
         serialDeviceDropdown->setLabelColor(serColor);
+        
+        
+        // send default values to scanner
+        if (scanner.isConnected()){
+            // callbacks
+            gearInput->onFocusLost();
+            rpmSlider->dispatchSliderChangedEvent();
+            numShotsSlider->dispatchSliderChangedEvent();
+            waitSlider->dispatchSliderChangedEvent();
+        }
     }
 }
 

@@ -11,58 +11,117 @@
 Scanner::Scanner(ofSerial* serialPtr){
     
     commander = Commander(serialPtr); // create serial commander
-    
 }
 
 bool Scanner::connect(){
-    //connected = true;
+    connected = commander.connect();
     return connected;
 }
 
-void Scanner::setClockwise(bool cw){
+int Scanner::update(){
+    
+    commander.update(); // get all new cmds
+    
+    // run through input queue and return num cmds processed
+    int numCmds = 0;
+    char cmd; unsigned long val;
+    while (commander.getNext(&cmd, &val)){
+        numCmds++;
+        parse(cmd,val);
+        ofLogNotice("Scanner") << "parsing cmd: " << cmd << " val: " << val;
+    }
+    return numCmds;
+}
 
+void Scanner::setClockwise(bool cw){
+    
+    commander.send('K',(int)cw); // 1 cw, 0 ccw
 }
 
 void Scanner::autoscan(bool start){
     
+    commander.send('A',(int)start); // 1 start, 0 stop
 }
 
-void Scanner::setRpm(int rpm){
+void Scanner::setRpm(int motorRpm){
     
+    commander.send('R',motorRpm);
 }
 
 void Scanner::setNumStepsTurntable(int numSteps){
     
+    nStepsTurntable = numSteps;
+    commander.send('G',numSteps);
 }
 
 void Scanner::setNumShots(int nShots){
     
+    commander.send('C',nShots);
 }
 
 void Scanner::setWaitAfterShot(int waitSeconds){
     
+    commander.send('W', waitSeconds*1000); // cvt to ms
 }
 
 void Scanner::takePhoto(){
     
+    commander.send('P', 1);
 }
 
 void Scanner::turn(){
     
+    commander.send('M', 1);
+    
 }
 
 void Scanner::rotate(){
-    cout << "rotating..." << endl;
+    commander.send('T',1);
 }
 
 void Scanner::rotateTo(float degree){
-    cout << "rotating to " << degree << endl;
+    
+    // convert degree to step #
+    degree = abs(degree); // make positive
+    unsigned long step = degree/360.0 * (float)nStepsTurntable;
+    commander.send('S',step);
+    
+    ofLogNotice("Scanner") << "moving to degree: " << degree << " - step #: " << step;
+}
+
+void Scanner::sendCommand(unsigned char cmd, unsigned long val){
+    commander.send(cmd, val);
 }
 
 void Scanner::sendCommand(string command){
-    cout << command << endl;
+    commander.send(command);
+}
+
+float Scanner::getDegree(){
+    return (float)currentStep/(float)nStepsTurntable * 360.0; // calc degree from current step
 }
 
 
+// PRIVATE
+
+
+bool Scanner::parse(char cmd, unsigned long val){
+    
+    bool good = true;
+    
+    if (cmd == 'R') rpm = val;
+    else if (cmd == 'M') bMoving = (val == 0) ? 0:1;
+    else if (cmd == 'P') bShooting = (val == 0) ? 0:1;
+    else if (cmd == 'C') numShotsPerRotation = val;
+    else if (cmd == 'K') clockwise = (val == 0) ? 0:1;
+    else if (cmd == 'A') autoscanShotsLeft = val;
+    else if (cmd == 'W') waitSeconds = val/1000;
+    else if (cmd == 'G') nStepsTurntable = val;
+    else if (cmd == 'S') currentStep = val;
+    else if (cmd == 'Q') nCmdsAtArduino = val;
+    else good = false;
+    
+    return good;
+}
 
 
