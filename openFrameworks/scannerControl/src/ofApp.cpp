@@ -31,9 +31,11 @@ void ofApp::setup(){
     // GUI
     
     gui = new ofxDatGui(0,0);
-    gui->setTheme(new GuiTheme(ofGetWidth()*0.2f));
+    guiTheme = new GuiTheme(ofGetWidth()*0.2f);
+    gui->setTheme(guiTheme);
 
     gui->addHeader(":: SCANNER CONTROLS ::");
+    gui->getHeader()->setDraggable(false);
     
     // SETUP CONTROLS
     
@@ -194,23 +196,46 @@ void ofApp::setup(){
     folderGui->setTheme(new GuiTheme(fgW));
     
     folderGui->addHeader(":: DROP WATCH FOLDER HERE ::");
+    folderGui->getHeader()->setDraggable(false);
     
     folderInput = folderGui->addTextInput("Watch Folder:");
+    imgSlider = folderGui->addSlider("Image to Display",0,0);
+    imgSlider->setPrecision(0); // int
+    animSpeedSlider = folderGui->addSlider("Animation Speed (fps)",0.5,24.0);
+    animSpeedSlider->setPrecision(1); // 0.1 resolution on float slider
+    animPauseSlider = folderGui->addSlider("Animation Pause Before Loop (sec)",0,10);
+    animPauseSlider->setPrecision(1); // 0.1 res
     
     folderGui->update();
     
     folderInput->setStripeColor(ofColor::blueSteel);
+    imgSlider->setStripeColor(ofColor::blueSteel);
+    animSpeedSlider->setStripeColor(ofColor::blueSteel);
+    animSpeedSlider->setValue(4);
+    animPauseSlider->setValue(1);
     
-    // call back for text input
+    // call backs
     folderInput->onTextInputEvent(this, &ofApp::newWatchFolderInput);
+    imgSlider->onSliderEvent([&](ofxDatGuiSliderEvent e){
+        imgIdx = e.target->getValue()-1;
+    });
+    animSpeedSlider->onSliderEvent([&](ofxDatGuiSliderEvent e){ // lamba, round to nearest 0.5
+        float nearestHalf = floor((e.target->getValue()*2)+0.5)/2;
+        e.target->setValue(nearestHalf);
+        animSwitchWait = 1/e.target->getValue();
+    });
+    animPauseSlider->onSliderEvent([&](ofxDatGuiSliderEvent e){
+        float nearestHalf = floor((e.target->getValue()*2)+0.5)/2;
+        e.target->setValue(nearestHalf);
+    });
     
     // calc area available for image drawing
-    ofVec2f topLeft(gui->getWidth()+10,folderGui->getHeight()+10);
-    float w = ofGetWidth()-10-topLeft.x;
-    float h = min(ofGetHeight()-topLeft.y-10, w);
-    w = h;
-    ofVec2f bottomRight(topLeft.x+w,topLeft.y+h);
-    imgArea = ofRectangle(topLeft, bottomRight);
+    
+    resizeImgAreas();
+    
+    // load font
+    font = ofxSmartFont::add(guiTheme->font.file,8);
+    
 }
 
 
@@ -245,9 +270,23 @@ void ofApp::update(){
     if (watchFolder.exists()){
         int nNew = loadNewImages();
         if (nNew > 0) {
-            // recalc img width/height (square) for given area
-            imgWidth = sqrt(imgArea.getArea()/images.size());
+            imgIdx = images.size()-1; // set imgIdx to newest in vector
+            imgSlider->setMax(images.size());
+            imgSlider->setMin(1);
+            imgSlider->setValue(images.size());
             ofLogVerbose("ofApp::update") << "loaded " << nNew << " new images";
+        }
+        // run animation
+        if (ofGetElapsedTimef()-animSwitchTime >= animSwitchWait){
+            bool switchAnim = true;
+            if (animFrame == images.size()-1){ // last image, so pause
+                if (!(ofGetElapsedTimef()-animSwitchTime >= animPauseSlider->getValue())) switchAnim = false; // not yet time to switch
+            }
+            // switch frame
+            if (switchAnim) {
+                if (++animFrame >= images.size()) animFrame = 0; // increment or wrap frame to 0
+                animSwitchTime = ofGetElapsedTimef();
+            }
         }
     }
 }
@@ -257,20 +296,45 @@ void ofApp::draw(){
     
     ofSetColor(50);
     ofDrawRectangle(imgArea);
+    ofDrawRectangle(animArea);
     
     ofSetColor(255);
-    ofVec2f pt = imgArea.getTopLeft();
-    for (int i=0; i<images.size(); i++){
+    
+    if (images.size() > 0){
         
-        if (pt.x + imgWidth > imgArea.width + imgArea.getLeft()) { // if overflow imgArea width
-            pt.x = imgArea.getLeft();
-            pt.y += imgWidth; // new row
+        // draw last image in images
+        float iW = images[imgIdx].getWidth();
+        float iH = images[imgIdx].getHeight();
+        // scale
+        if (iW >= iH){
+            iH *= imgArea.width/iW;
+            iW = imgArea.width;
+        } else {
+            iW *= imgArea.height/iH;
+            iH = imgArea.height;
         }
-        float imgHeight = (imgWidth/images[i].getWidth())*images[i].getHeight();
-        images[i].draw(pt.x, pt.y, imgWidth, imgHeight);
-        pt.x += imgWidth;
+        images[imgIdx].draw(imgArea.getTopLeft(),iW,iH);
+        
+        // label
+        string imgLbl = "Image: " + loadedFiles[imgIdx].getFileName();
+        font->draw(imgLbl, imgArea.getBottomLeft().x, imgArea.getBottomLeft().y+20.0);
+        
+        // draw animation
+        if (animFrame < images.size()){ // safety
+            float hA = (animArea.width/images[animFrame].getWidth())*images[animFrame].getHeight();
+            images[animFrame].draw(animArea.getTopLeft(),animArea.width,hA);
+            
+            // label
+            font->draw(loadedFiles[animFrame].getFileName(), animArea.getLeft(), animArea.getBottom()+20.0);
+            string animFrameLbl = "Animation frame: " + ofToString(animFrame+1) + " / " + ofToString(images.size());
+            ofVec2f animFrameLblPos(animArea.getRight() - font->width(animFrameLbl), animArea.getBottom()+20);
+            font->draw(animFrameLbl, animFrameLblPos.x, animFrameLblPos.y);
+            
+        } else {
+            ofLogError("ofApp::draw") << "calling animation frame " << animFrame << " but only " << images.size() << " images loaded!";
+        }
     }
- 
+
 }
 
 //--------------------------------------------------------------
@@ -489,6 +553,12 @@ bool ofApp::loadWatchFolder(string path){
         folderInput->setLabelColor(ofColor::green);
         folderInput->setText(watchFolder.getAbsolutePath());
         
+        // reset images vector & animation stuff
+        loadedFiles.clear();
+        images.clear();
+        animSwitchTime = ofGetElapsedTimef();
+        animFrame = 0;
+        
         return true;
     }
     
@@ -531,8 +601,32 @@ int ofApp::loadNewImages(){
                 }
             }
         }
+    } else if (loadedFiles.size() > watchFolder.getFiles().size()) { // img delete, reload all
+        loadedFiles.clear();
+        images.clear();
+        animSwitchTime = ofGetElapsedTimef();
+        animFrame = 0;
+        numNew = loadNewImages();
     }
     return numNew;
+}
+
+//--------------------------------------------------------------
+void ofApp::resizeImgAreas(){
+    
+    // newest img
+    ofVec2f topLeftImg(gui->getWidth()+10,folderGui->getHeight()+10);
+    float imgH = gui->getPosition().y+gui->getHeight()-topLeftImg.y;
+    float imgW = (ofGetWidth()-topLeftImg.x-20)*0.5;
+    imgH = min(imgH, imgW); // fit
+    imgW = imgH;
+    ofVec2f bottomRightImg(topLeftImg.x+imgW,topLeftImg.y+imgW); // square
+    imgArea = ofRectangle(topLeftImg,bottomRightImg);
+    
+    // animation
+    ofVec2f topLeftAnim(imgArea.getRight()+10,imgArea.getTop());
+    ofVec2f bottomRightAnim(topLeftAnim.x+imgArea.width,topLeftAnim.y+imgArea.height);
+    animArea = ofRectangle(topLeftAnim,bottomRightAnim);
 }
 
 //--------------------------------------------------------------
@@ -546,8 +640,17 @@ void ofApp::dragEvent(ofDragInfo dragInfo){
             loadWatchFolder(dragInfo.files[0]);
         }
     }
+}
 
+//--------------------------------------------------------------
+void ofApp::windowResized(int w, int h){
     
+    
+    // resize folder gui
+    folderGui->setWidth(w-folderGui->getPosition().x-10.0);
+    
+    // resize img displays
+    resizeImgAreas();
 }
 
 
@@ -591,10 +694,7 @@ void ofApp::mouseExited(int x, int y){
 
 }
 
-//--------------------------------------------------------------
-void ofApp::windowResized(int w, int h){
 
-}
 
 //--------------------------------------------------------------
 void ofApp::gotMessage(ofMessage msg){

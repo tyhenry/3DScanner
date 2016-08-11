@@ -33,6 +33,7 @@ public:
     bool loadWatchFolder(string folderPath);
     
     int loadNewImages();
+    void resizeImgAreas();
  
     //void setTurnDegreesLabel();
     
@@ -61,6 +62,7 @@ public:
     // GUI elements
     
     ofxDatGui* gui;
+    GuiTheme* guiTheme;
     ofxDatGuiDropdown* serialDeviceDropdown; // list serial devices
     ofxDatGuiDropdown* serialBaudDropdown; // list baud rates
     ofxDatGuiButton* scannerConnectBtn; // connect to scanner @ serial (device, baud)
@@ -85,11 +87,18 @@ public:
     
     ofxDatGui* folderGui;
     ofxDatGuiTextInput* folderInput;
+    ofxDatGuiSlider* imgSlider;
+    ofxDatGuiSlider* animSpeedSlider;
+    ofxDatGuiSlider* animPauseSlider;
     
     ofDirectory watchFolder;
     vector <ofFile> loadedFiles;
     vector <ofImage> images;
-    ofRectangle imgArea;
-    float imgWidth = 0;
+    ofRectangle imgArea, animArea; // latest image and looping animation
+    int imgIdx = 0; // current img to show
+    float animSwitchTime = 0; // time of last frame switch
+    float animSwitchWait = 0.25; // wait time in s between frames (fps based)
+    int animFrame = 0; // idx of images - frame of animation
+    shared_ptr<ofxSmartFont> font;
 		
 };
